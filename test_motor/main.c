@@ -176,7 +176,7 @@ ISR(INT1_vect) // ISR for external interrupt 1
 		PORTD &= ~(1 << IN1);
 		text = "Pause_DC";
 		lq_clear(&device);
-		lq_setCursor(&device, 1, 0);
+		lq_setCursor(&device, 0, 0);
 		lq_print(&device, text);
 	}
 }
@@ -184,6 +184,12 @@ ISR(INT1_vect) // ISR for external interrupt 1
 ISR(TIMER2_OVF_vect) // update sampling time
 {
 	sample_counter++;
+	if (bit_is_set(PINB, 1) == 0)
+	{
+		lq_setCursor(&device, 1, 0);
+		Ctrl_speed = 100;
+		lq_print(&device, "PB1_is_pressed");
+	}
 
 	if (sample_counter == 80) // sample every 1200ms
 	{
