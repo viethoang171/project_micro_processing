@@ -30,7 +30,7 @@ volatile int16_t i16_pulse = 0;
 volatile int16_t i16_pre_Pulse = 0;
 volatile int16_t rSpeed, Err, pre_Err;	  // for speed control
 volatile uint8_t Kp = 8, Kd = 10, Ki = 1; // PID coefficient
-volatile uint8_t Ctrl_speed = 5;		  // desired speed
+volatile uint8_t Ctrl_speed = 10;		  // desired speed
 volatile int16_t out_put_pulse;
 
 volatile uint8_t flag = 0;
@@ -154,7 +154,7 @@ ISR(INT1_vect) // ISR for external interrupt 1
 	if (flag % 2 != 0)
 	{
 		PORTD |= (1 << IN1);
-		motor_speed_PID(100);
+		motor_speed_PID(Ctrl_speed);
 
 		lq_clear(&device);
 		lq_setCursor(&device, 1, 0);
@@ -187,8 +187,19 @@ ISR(TIMER2_OVF_vect) // update sampling time
 	if (bit_is_set(PINB, 1) == 0)
 	{
 		lq_setCursor(&device, 1, 0);
-		Ctrl_speed = 100;
+		Ctrl_speed = 10;
+		if (flag % 2 != 0)
+			motor_speed_PID(10);
 		lq_print(&device, "PB1_is_pressed");
+	}
+	if (bit_is_set(PINB, 2) == 0)
+	{
+		PORTD &= ~(1 << IN2);
+		lq_setCursor(&device, 1, 0);
+		Ctrl_speed = 200;
+		if (flag % 2 != 0)
+			motor_speed_PID(200);
+		lq_print(&device, "PB2_is_pressed");
 	}
 
 	if (sample_counter == 80) // sample every 1200ms
@@ -204,12 +215,12 @@ ISR(TIMER2_OVF_vect) // update sampling time
 			if (bit_is_set(PINB, 0) != 0)
 			{
 				lq_setCursor(&device, 1, 0);
-				lq_print(&device, "quay nghich");
+				lq_print(&device, "quay_nghich");
 			}
 			else
 			{
 				lq_setCursor(&device, 1, 0);
-				lq_print(&device, "quay thuan");
+				lq_print(&device, "quay_thuan");
 			}
 		}
 
@@ -219,5 +230,5 @@ ISR(TIMER2_OVF_vect) // update sampling time
 
 	TCNT2 = 21; // set init value for T/C2
 	if (flag % 2 != 0)
-		motor_speed_PID(200);
+		motor_speed_PID(Ctrl_speed);
 }
