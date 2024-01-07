@@ -22,6 +22,10 @@
 #define IN2 7
 #define EN 6
 
+#define LCD_ADDRESS 0x27
+#define NUMBER_COLUMNS 16
+#define NUMBER_ROW 2
+
 #define PWM_PERIOD 16000
 #define SAMPLING_TIME 15	 // ms
 #define INV_SAMPLING_TIME 67 // Hz
@@ -34,9 +38,9 @@ volatile int16_t i16_pre_Pulse = 0;
 volatile int16_t rSpeed, Err, pre_Err;	  // for speed control
 volatile uint8_t Kp = 8, Kd = 10, Ki = 1; // PID coefficient
 volatile uint8_t Ctrl_speed = 10;		  // desired speed
-volatile int16_t out_put_pulse;
+volatile int16_t out_put_pulse;			  // gia tri tinh duoc tu
 
-volatile uint8_t flag = 0;
+volatile uint8_t flag_run_DC = 0;
 volatile uint8_t flag_direct = 2;
 
 volatile uint8_t sample_counter = 0;
@@ -110,28 +114,31 @@ LiquidCrystalDevice_t device;
 int main(void)
 {
 	// Motor
-	DDRD = (1 << EN) | (1 << IN1) | (1 << IN2);
-	DDRB = 0x00;
+	DDRD |= (1 << EN) | (1 << IN1) | (1 << IN2);
 
-	PORTD = (1 << 2) | (1 << 3); // Direct output Pins INT0, INT1
-	EICRA = 0x0A;				 // make INT0 and INT1 falling edge triggered
+	// Config Pins B input
+	DDRB |= 0x00;
 
-	// Use Timer2 for timer 25ms, sampling time
-	TCCR2B = (1 << CS02) | (1 << CS00); // CS02=1, CS01=0, CS00=1: Prescaler 1024
-	TCNT2 = 21;							// set init value for T/C2 to get 15 ms (f=16MHz)
-	TIMSK2 = (1 << TOIE2);				// alow interrupt when over flow T/C0
+	PORTD |= (1 << 2) | (1 << 3); // Direct output Pins INT0, INT1
+	PORTD &= ~((1 << IN2) | (1 << IN1));
+	EICRA |= 0x0A; // make INT0 and INT1 falling edge triggered
+
+	// Use Timer2 for timer 15ms, sampling time
+	TCCR2B |= (1 << CS02) | (1 << CS00); // CS02=1, CS01=0, CS00=1: Prescaler 1024
+	TCNT2 = 21;							 // set init value for T/C2 to get 15 ms (f=16MHz)
+	TIMSK2 |= (1 << TOIE2);				 // alow interrupt when over flow T/C0
 
 	// Use Timer0 for generate PWM
 	TCCR0A |= (1 << WGM01) | (1 << WGM00) | (1 << COM0A1);
 	TCCR0B |= (1 << CS02) | (1 << CS00);
 
-	EIMSK = (1 << INT0) | (1 << INT1); // enable external interrupt 0
-	sei();							   // enable interrupts
+	EIMSK |= (1 << INT0) | (1 << INT1); // enable external interrupt 0
+	sei();								// enable interrupts
 
 	// I2C LCD
 	i2c_master_init(I2C_SCL_FREQUENCY_100);
 
-	device = lq_init(0x27, 16, 2, 0);
+	device = lq_init(LCD_ADDRESS, NUMBER_COLUMNS, NUMBER_ROW, 0);
 	lq_turnOnBacklight(&device);
 
 	while (1)
@@ -155,8 +162,8 @@ ISR(INT0_vect) // ISR for external interrupt 0
 
 ISR(INT1_vect) // ISR for external interrupt 1
 {
-	flag++;
-	if (flag % 2 != 0)
+	flag_run_DC++;
+	if (flag_run_DC % 2 != 0)
 	{
 		PORTD |= (1 << IN1);
 		// PORTD &= ~(1 << IN2);
@@ -178,26 +185,26 @@ ISR(TIMER2_OVF_vect) // update sampling time
 	{
 		lq_setCursor(&device, 1, 0);
 		Ctrl_speed = 10;
-		if (flag % 2 != 0)
+		if (flag_run_DC % 2 != 0)
 			motor_speed_PID(10);
 		lq_print(&device, "PB1_is_pressed");
 	}
 	if (bit_is_set(PINB, 2) == 0)
 	{
-		// flag++;
-		// PORTD &= ~(1 << IN1);
-		// PORTD |= (1 << IN2);
+		flag_run_DC++;
+		PORTD &= ~(1 << IN1);
+		PORTD |= (1 << IN2);
 
 		lq_setCursor(&device, 1, 0);
-		// Ctrl_speed = 200;
-		//  if (flag % 2 != 0)
-		// motor_speed_PID(200);
+		Ctrl_speed = 200;
+		if (flag_run_DC % 2 != 0)
+			motor_speed_PID(200);
 		lq_print(&device, "PB2_is_pressed");
 	}
 
 	if (sample_counter == 80) // sample every 1200ms
 	{
-		if (flag % 2 == 1) // If turned on DC
+		if (flag_run_DC % 2 == 1) // If turned on DC
 		{
 
 			lq_clear(&device);
@@ -224,6 +231,6 @@ ISR(TIMER2_OVF_vect) // update sampling time
 	}
 
 	TCNT2 = 21; // set init value for T/C2
-	if (flag % 2 != 0)
+	if (flag_run_DC % 2 != 0)
 		motor_speed_PID(Ctrl_speed);
 }
