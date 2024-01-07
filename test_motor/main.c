@@ -26,6 +26,9 @@
 #define SAMPLING_TIME 15	 // ms
 #define INV_SAMPLING_TIME 67 // Hz
 
+#define QUAY_THUAN 1
+#define QUAY_NGHICH 0
+
 volatile int16_t i16_pulse = 0;
 volatile int16_t i16_pre_Pulse = 0;
 volatile int16_t rSpeed, Err, pre_Err;	  // for speed control
@@ -34,8 +37,9 @@ volatile uint8_t Ctrl_speed = 10;		  // desired speed
 volatile int16_t out_put_pulse;
 
 volatile uint8_t flag = 0;
+volatile uint8_t flag_direct = 2;
 
-uint8_t sample_counter = 0;
+volatile uint8_t sample_counter = 0;
 
 char *text = NULL;
 
@@ -109,8 +113,8 @@ int main(void)
 	DDRD = (1 << EN) | (1 << IN1) | (1 << IN2);
 	DDRB = 0x00;
 
-	PORTD = (1 << 2) | (1 << 3);
-	EICRA = 0x0A; // make INT0 and INT1 falling edge triggered
+	PORTD = (1 << 2) | (1 << 3); // Direct output Pins INT0, INT1
+	EICRA = 0x0A;				 // make INT0 and INT1 falling edge triggered
 
 	// Use Timer2 for timer 25ms, sampling time
 	TCCR2B = (1 << CS02) | (1 << CS00); // CS02=1, CS01=0, CS00=1: Prescaler 1024
@@ -140,36 +144,22 @@ ISR(INT0_vect) // ISR for external interrupt 0
 	if (bit_is_set(PINB, 0) != 0)
 	{
 		i16_pulse++;
+		flag_direct = QUAY_NGHICH;
 	}
 	else
 	{
 		i16_pulse--;
+		flag_direct = QUAY_THUAN;
 	}
 }
 
 ISR(INT1_vect) // ISR for external interrupt 1
 {
-
 	flag++;
 	if (flag % 2 != 0)
 	{
 		PORTD |= (1 << IN1);
-		motor_speed_PID(Ctrl_speed);
-
-		lq_clear(&device);
-		lq_setCursor(&device, 1, 0);
-		lq_print(&device, "Run_DC");
-
-		if (bit_is_set(PINB, 0) != 0)
-		{
-			lq_setCursor(&device, 0, 0);
-			lq_print(&device, "quay_nghich");
-		}
-		else
-		{
-			lq_setCursor(&device, 0, 0);
-			lq_print(&device, "quay_thuan");
-		}
+		// PORTD &= ~(1 << IN2);
 	}
 	else
 	{
@@ -194,30 +184,35 @@ ISR(TIMER2_OVF_vect) // update sampling time
 	}
 	if (bit_is_set(PINB, 2) == 0)
 	{
-		PORTD &= ~(1 << IN2);
+		// flag++;
+		// PORTD &= ~(1 << IN1);
+		// PORTD |= (1 << IN2);
+
 		lq_setCursor(&device, 1, 0);
-		Ctrl_speed = 200;
-		if (flag % 2 != 0)
-			motor_speed_PID(200);
+		// Ctrl_speed = 200;
+		//  if (flag % 2 != 0)
+		// motor_speed_PID(200);
 		lq_print(&device, "PB2_is_pressed");
 	}
 
 	if (sample_counter == 80) // sample every 1200ms
 	{
-		if (flag % 2 == 1)
+		if (flag % 2 == 1) // If turned on DC
 		{
+
 			lq_clear(&device);
 			lq_setCursor(&device, 0, 0);
 			lq_print(&device, "act_speed:");
 			lq_setCursor(&device, 0, 11);
-			text = intToString(out_put_pulse);
+			text = intToString(rSpeed);
 			lq_print(&device, text);
-			if (bit_is_set(PINB, 0) != 0)
+
+			if (flag_direct == QUAY_NGHICH)
 			{
 				lq_setCursor(&device, 1, 0);
 				lq_print(&device, "quay_nghich");
 			}
-			else
+			else if (flag_direct == QUAY_THUAN)
 			{
 				lq_setCursor(&device, 1, 0);
 				lq_print(&device, "quay_thuan");
